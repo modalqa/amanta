@@ -45,7 +45,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0",
+    "@playwright/test": "^1.64.1",
     "@prisma/prisma-schema-wasm": "^8.1.0-1.d1b3f377ca835d73fd50954a5e22128b9ebdd6b8",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.20.5",
