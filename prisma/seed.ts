@@ -44,6 +44,8 @@ type DemoOrg = {
   address: string | null;
   /** Fictional people; emails use the reserved .test TLD so they can never reach a real inbox. */
   people: Array<[string, string, Role]>;
+  /** If an organization with this slug was already registered by a user, add the demo data to it while it is still empty. */
+  fillExisting?: boolean;
 };
 
 // The first entry is what the E2E suite logs in with; keep it unchanged.
@@ -61,7 +63,7 @@ const DEMO_ORGS: DemoOrg[] = [
   },
   {
     // Address and legal details are not known; left empty rather than invented.
-    name: "PT RAI", slug: "pt-rai", legalName: "PT RAI", province: null, address: null,
+    name: "PT RAI", slug: "pt-rai", legalName: "PT RAI", province: null, address: null, fillExisting: true,
     people: [
       ["owner@rai.test", "Owner PT RAI", "OWNER"],
       ["qa@rai.test", "QA Manager PT RAI", "QA_MANAGER"],
@@ -73,13 +75,22 @@ const DEMO_ORGS: DemoOrg[] = [
   },
 ];
 
-/** Creates one organization with the full demo dataset. Returns false if it already exists. */
+/**
+ * Adds the full demo dataset to one organization. Creates it when missing; with fillExisting, reuses an
+ * existing organization that has no operational data yet (its own name and details are left as they are).
+ * Returns false when skipped, so re-running the seed never duplicates data.
+ */
 async function seedDemoOrg(spec: DemoOrg, hash: string): Promise<boolean> {
-  if (await prisma.organization.findUnique({ where: { slug: spec.slug } })) {
-    console.log(`Skipping ${spec.name}: organization '${spec.slug}' already exists.`);
-    return false;
+  const existing = await prisma.organization.findUnique({ where: { slug: spec.slug } });
+  if (existing) {
+    const where = { organizationId: existing.id };
+    const hasData = (await prisma.product.count({ where })) + (await prisma.supplier.count({ where })) + (await prisma.haccpControl.count({ where })) > 0;
+    if (!spec.fillExisting || hasData) {
+      console.log(`Skipping ${spec.name}: organization '${spec.slug}' already exists${hasData ? " and has data" : ""}.`);
+      return false;
+    }
   }
-  const org = await prisma.organization.create({ data: { name: spec.name, slug: spec.slug, legalName: spec.legalName, province: spec.province, address: spec.address } });
+  const org = existing ?? await prisma.organization.create({ data: { name: spec.name, slug: spec.slug, legalName: spec.legalName, province: spec.province, address: spec.address } });
   const people = spec.people;
   const ids: Record<string, string> = {};
   for (const [email, name, role] of people) {
@@ -87,7 +98,9 @@ async function seedDemoOrg(spec: DemoOrg, hash: string): Promise<boolean> {
     await prisma.membership.create({ data: { organizationId: org.id, userId: u.id, role } });
     ids[role === "QA_MANAGER" && ids.QA_MANAGER ? "QA2" : role] = u.id;
   }
-  await writeAudit(org.id, { userId: ids.OWNER, ip: "seed" }, { action: "organization.created", entityType: "Organization", entityId: org.id, summary: "Demo organization (seed)" });
+  await writeAudit(org.id, { userId: ids.OWNER, ip: "seed" }, existing
+    ? { action: "organization.demo_data_added", entityType: "Organization", entityId: org.id, summary: "Demo data added (seed)" }
+    : { action: "organization.created", entityType: "Organization", entityId: org.id, summary: "Demo organization (seed)" });
   const qa = await ctxFor(org.id, ids.QA_MANAGER, "QA_MANAGER");
   const op = await ctxFor(org.id, ids.OPERATOR, "OPERATOR");
 
@@ -150,11 +163,11 @@ async function main() {
   if (await prisma.organization.findUnique({ where: { slug: "sambal-lain" } })) {
     console.log("Skipping UD Sambal Lain: already exists.");
   } else {
-  const other = await prisma.organization.create({ data: { name: "UD Sambal Lain", slug: "sambal-lain" } });
-  const otherOwner = await user("owner@sambal-lain.test", "Pemilik Sambal", hash);
-  await prisma.membership.create({ data: { organizationId: other.id, userId: otherOwner.id, role: "OWNER" } });
-  const oc = await ctxFor(other.id, otherOwner.id, "OWNER");
-  await createSupplier(oc, { name: "Petani Cabai Garut", code: null, contactName: null, email: null, phone: null, address: "Garut", status: "PENDING", riskLevel: "MEDIUM", notes: null });
+    const other = await prisma.organization.create({ data: { name: "UD Sambal Lain", slug: "sambal-lain" } });
+    const otherOwner = await user("owner@sambal-lain.test", "Pemilik Sambal", hash);
+    await prisma.membership.create({ data: { organizationId: other.id, userId: otherOwner.id, role: "OWNER" } });
+    const oc = await ctxFor(other.id, otherOwner.id, "OWNER");
+    await createSupplier(oc, { name: "Petani Cabai Garut", code: null, contactName: null, email: null, phone: null, address: "Garut", status: "PENDING", riskLevel: "MEDIUM", notes: null });
   }
 
   console.log("Seed complete.");
