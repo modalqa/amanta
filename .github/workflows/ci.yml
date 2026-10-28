@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Security note: third-party actions are referenced by major tag here. Pin each one to a full
+# commit SHA (Dependabot keeps them updated) — see docs/SECURITY.md. Trivy's GitHub Actions were
+# compromised in March 2026, so this pipeline uses OSV-Scanner + npm audit instead.
+
+env:
+  NODE_VERSION: "24.22.1"
+  DATABASE_URL: postgresql://amanta:amanta_ci@localhost:5432/amanta_ci
+  TEST_DATABASE_URL: postgresql://amanta:amanta_ci@localhost:5432/amanta_test
+  E2E_DATABASE_URL: postgresql://amanta:amanta_ci@localhost:5432/amanta_e2e
+
+jobs:
+  quality:
+    name: Lint · typecheck · unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+
+  integration:
+    name: Integration + migrations drift + E2E
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_USER: amanta, POSTGRES_PASSWORD: amanta_ci, POSTGRES_DB: amanta_ci }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U amanta" --health-interval 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
+      - run: npm ci
+      - name: Create test databases
+        run: |
+          PGPASSWORD=amanta_ci psql -h localhost -U amanta -d amanta_ci -c "CREATE DATABASE amanta_test" -c "CREATE DATABASE amanta_e2e"
+      - name: Apply migrations (Prisma Migrate)
+        run: |
+          npx prisma migrate deploy
+          DATABASE_URL=$TEST_DATABASE_URL npx prisma migrate deploy
+      - name: Schema drift check (migrations vs schema.prisma)
+        run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+      - run: npm run test:integration
+      - name: Build
+        run: npm run build
+        env: { APP_ENCRYPTION_KEY: "${{ secrets.CI_ENCRYPTION_KEY || 'MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=' }}" }
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with: { name: playwright-report, path: playwright-report, retention-days: 7 }
+
+  security:
+    name: Dependency, license & secret scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v5
+        with: { node-version: "${{ env.NODE_VERSION }}", cache: npm }
+      - run: npm ci --ignore-scripts
+      - name: npm audit (fail on high/critical)
+        run: npm audit --audit-level=high
+      - name: License policy (commercial-friendly allow-list)
+        run: npm run licenses:check
+      - name: OSV-Scanner (lockfile vulnerabilities)
+        run: |
+          docker run --rm -v "$PWD:/src" ghcr.io/google/osv-scanner:latest scan source --lockfile /src/package-lock.json
+      - name: Gitleaks (secrets in full git history)
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest git /repo --redact --verbose --exit-code 1

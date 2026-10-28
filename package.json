@@ -1,0 +1,68 @@
+{
+  "name": "amanta",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Amanta - AI Food Safety & Quality Operations platform for Indonesian food manufacturers",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.23.4 <23 || >=24.22.1"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "worker": "tsx --conditions=react-server src/worker/index.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:seed": "tsx --conditions=react-server prisma/seed.ts",
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit",
+    "test:integration": "vitest run --project integration",
+    "test:e2e": "playwright test",
+    "db:migrate:fallback": "node scripts/db-migrate.mjs",
+    "licenses:check": "license-checker-rseidelsohn --production --excludePrivatePackages --onlyAllow \"MIT;ISC;Apache-2.0;BSD-2-Clause;BSD-3-Clause;0BSD;Unlicense;CC0-1.0;CC-BY-4.0;BlueOak-1.0.0;Python-2.0;(MIT OR CC0-1.0);(MIT AND Zlib);(MIT OR GPL-3.0-or-later);LGPL-3.0-or-later;EPL-2.0;MIT*;ISC*;BSD*\" --excludePackages \"buffers@0.1.1\""
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1158.0",
+    "@node-rs/argon2": "^2.2.2",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "dotenv": "^18.0.9",
+    "exceljs": "^4.4.0",
+    "file-type": "^22.2.0",
+    "mammoth": "^1.13.0",
+    "next": "^16.4.3",
+    "pdfkit": "^0.20.2",
+    "pg": "^8.23.1",
+    "pg-boss": "^12.38.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "server-only": "^0.0.1",
+    "unpdf": "^1.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@prisma/prisma-schema-wasm": "^8.1.0-1.d1b3f377ca835d73fd50954a5e22128b9ebdd6b8",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22.20.5",
+    "@types/pdfkit": "^0.17.7",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^10.13.0",
+    "eslint-config-next": "^16.4.3",
+    "license-checker-rseidelsohn": "^4.4.2",
+    "prisma": "^7.10.1",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
+}

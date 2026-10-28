@@ -1,0 +1,24 @@
+SOP PRODUKSI NUGGET AYAM BEKU – PT CONTOH PANGAN SEJAHTERA
+Nomor dokumen: SOP-PRD-012 Rev.03
+
+1. Penerimaan bahan baku
+   - Daging ayam fillet diterima dari pemasok bersertifikat halal (BPJPH). Suhu daging saat diterima maksimal 4 °C.
+   - Tepung terigu, tepung roti, bumbu dan minyak diperiksa kondisi kemasan dan tanggal kedaluwarsa.
+   - Bahan disimpan di chiller 0–4 °C (daging) atau gudang kering (bahan kering).
+2. Penggilingan dan pencampuran
+   - Daging digiling, dicampur bumbu, es batu dan tepung. Suhu adonan dijaga di bawah 10 °C.
+3. Pencetakan dan pelapisan (battering & breading)
+   - Adonan dicetak, dilapisi batter dan tepung roti. Tepung terigu mengandung gluten (alergen).
+4. Penggorengan awal (pre-frying)
+   - Minyak 170–180 °C selama 30 detik.
+5. Pemasakan (steam cooking)
+   - Nugget dimasak dengan uap hingga suhu inti minimal 75 °C. Suhu inti diukur setiap 30 menit dengan termometer probe terkalibrasi.
+   - Jika suhu inti < 75 °C, produk ditahan dan dimasak ulang; termometer diverifikasi.
+6. Pendinginan dan pembekuan cepat (IQF)
+   - Produk dibekukan dalam spiral freezer hingga suhu inti ≤ -18 °C.
+7. Pengemasan dan deteksi logam
+   - Setiap kemasan melewati metal detector (Fe 2,0 mm; Non-Fe 2,5 mm; SUS 3,0 mm). Uji fungsi dengan test piece setiap awal shift dan setiap 2 jam.
+   - Produk yang ditolak dipisahkan dan diperiksa ulang.
+8. Penyimpanan beku dan distribusi
+   - Cold storage ≤ -18 °C. Suhu dicatat setiap 4 jam.
+Catatan: Label mencantumkan alergen (gandum/gluten, telur) dan logo halal.

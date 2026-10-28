@@ -1,0 +1,83 @@
+# Local/full-stack setup: PostgreSQL + S3-compatible storage (SeaweedFS, Apache-2.0) + web + worker.
+# 1) cp .env.docker.example .env.docker && edit secrets
+# 2) docker compose --env-file .env.docker up -d --build
+# 3) docker compose --env-file .env.docker run --rm migrate      (migrations + bucket)
+# 4) optional demo data: docker compose --env-file .env.docker run --rm migrate npm run db:seed
+name: amanta
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-amanta}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-amanta}
+  APP_URL: ${APP_URL:-http://localhost:3000}
+  APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?set APP_ENCRYPTION_KEY}
+  COOKIE_SECURE: ${COOKIE_SECURE:-false}
+  STORAGE_DRIVER: s3
+  S3_ENDPOINT: http://s3:8333
+  S3_REGION: us-east-1
+  S3_BUCKET: ${S3_BUCKET:-amanta-documents}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY}
+  S3_FORCE_PATH_STYLE: "true"
+  UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-20}
+  AI_PROVIDER: ${AI_PROVIDER:-none}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+  OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-amanta}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-amanta}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-amanta}"]
+      interval: 5s
+      retries: 20
+    # Not exposed publicly; uncomment for local tooling only.
+    # ports: ["127.0.0.1:5432:5432"]
+
+  s3:
+    image: ${SEAWEEDFS_IMAGE:-chrislusf/seaweedfs:latest}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/docker/seaweedfs-entrypoint.sh"]
+    environment:
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?set S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?set S3_SECRET_ACCESS_KEY}
+    volumes:
+      - s3data:/data
+      - ./docker/seaweedfs-entrypoint.sh:/docker/seaweedfs-entrypoint.sh:ro
+
+  migrate:
+    build: { context: ., target: worker }
+    profiles: ["tools"]
+    environment: *app-env
+    command: ["sh", "-c", "npx prisma migrate deploy && npx tsx --conditions=react-server scripts/init-storage.ts"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      s3: { condition: service_started }
+
+  web:
+    build: { context: ., target: web }
+    restart: unless-stopped
+    environment: *app-env
+    ports: ["${WEB_PORT:-3000}:3000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      s3: { condition: service_started }
+
+  worker:
+    build: { context: ., target: worker }
+    restart: unless-stopped
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      s3: { condition: service_started }
+
+volumes:
+  pgdata:
+  s3data:

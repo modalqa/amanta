@@ -1,0 +1,852 @@
+// Amanta – AI Food Safety & Quality Operations
+// Every tenant-owned model carries `organizationId` and is accessed only through
+// the tenant-scoped client in src/server/db/tenant.ts.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Identity & tenancy ─────────────────────────────
+
+enum Role {
+  OWNER
+  ADMIN
+  QA_MANAGER
+  SUPERVISOR
+  OPERATOR
+  AUDITOR
+}
+
+enum Locale {
+  id
+  en
+}
+
+enum TemperatureUnit {
+  C
+  F
+}
+
+model Organization {
+  id              String          @id @default(cuid())
+  name            String
+  slug            String          @unique
+  legalName       String?
+  nib             String? // Nomor Induk Berusaha
+  address         String?
+  province        String?
+  timezone        String          @default("Asia/Jakarta")
+  locale          Locale          @default(id)
+  dateFormat      String          @default("dd/MM/yyyy")
+  temperatureUnit TemperatureUnit @default(C)
+  weightUnit      String          @default("kg")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  memberships         Membership[]
+  invitations         Invitation[]
+  apiKeys             ApiKey[]
+  secrets             OrgSecret[]
+  auditLogs           AuditLog[]
+  documents           Document[]
+  aiRuns              AiRun[]
+  products            Product[]
+  haccpControls       HaccpControl[]
+  checklistTemplates  ChecklistTemplate[]
+  checklistItems      ChecklistItem[]
+  submissions         ChecklistSubmission[]
+  responses           ChecklistResponse[]
+  ccpRecords          CcpRecord[]
+  deviations          Deviation[]
+  capas               Capa[]
+  suppliers           Supplier[]
+  certificates        SupplierCertificate[]
+  ingredients         Ingredient[]
+  ingredientLots      IngredientLot[]
+  batches             Batch[]
+  batchInputs         BatchInput[]
+  shipments           Shipment[]
+  notifications       Notification[]
+  evidenceLinks       EvidenceLink[]
+  counters            Counter[]
+}
+
+model User {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  name              String
+  passwordHash      String
+  locale            Locale    @default(id)
+  failedLoginCount  Int       @default(0)
+  lockedUntil       DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  memberships Membership[]
+  sessions    Session[]
+}
+
+model Membership {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  role           Role
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model Session {
+  id             String   @id @default(cuid())
+  tokenHash      String   @unique
+  userId         String
+  organizationId String?
+  ipAddress      String?
+  userAgent      String?
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Invitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  email          String
+  role           Role
+  tokenHash      String       @unique
+  invitedById    String
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model ApiKey {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  prefix         String       @unique
+  keyHash        String
+  scopes         String[]
+  createdById    String
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+/// Encrypted (AES-256-GCM) per-organization secrets, e.g. an AI provider API key override.
+model OrgSecret {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  ciphertext     String
+  iv             String
+  authTag        String
+  keyVersion     Int          @default(1)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+}
+
+/// Append-only, hash-chained audit trail.
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  seq            Int
+  actorUserId    String?
+  actorApiKeyId  String?
+  action         String
+  entityType     String
+  entityId       String?
+  summary        String?
+  metadata       Json?
+  ipAddress      String?
+  prevHash       String?
+  hash           String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, seq])
+  @@index([organizationId, entityType, entityId])
+  @@index([organizationId, createdAt])
+}
+
+model RateLimit {
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
+}
+
+/// Per-organization sequential counters for human-readable codes (DEV-2026-0001).
+model Counter {
+  organizationId String
+  name           String
+  value          Int          @default(0)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, name])
+}
+
+// ───────────────────────────── Documents & AI ─────────────────────────────
+
+enum DocumentCategory {
+  SOP
+  HACCP_PLAN
+  RECIPE
+  PROCESS_FLOW
+  SUPPLIER_CERTIFICATE
+  COA
+  SPECIFICATION
+  QUALITY_RECORD
+  EVIDENCE
+  OTHER
+}
+
+enum DocumentStatus {
+  UPLOADED
+  PROCESSING
+  EXTRACTED
+  FAILED
+}
+
+model Document {
+  id              String           @id @default(cuid())
+  organizationId  String
+  title           String
+  category        DocumentCategory
+  status          DocumentStatus   @default(UPLOADED)
+  originalName    String
+  mimeType        String
+  sizeBytes       Int
+  sha256          String
+  storageKey      String
+  extractedText   String?          @db.Text
+  extractionError String?
+  pageCount       Int?
+  uploadedById    String
+  supplierId      String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier        Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  aiRuns          AiRun[]
+  haccpControls   HaccpControl[]
+  certificates    SupplierCertificate[]
+  evidenceLinks   EvidenceLink[]
+
+  @@index([organizationId, category])
+  @@index([organizationId, createdAt])
+}
+
+enum AiRunKind {
+  HACCP_FROM_DOCUMENT
+  CHECKLIST_FROM_DOCUMENT
+  CAPA_DRAFT
+}
+
+enum AiRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model AiRun {
+  id             String       @id @default(cuid())
+  organizationId String
+  kind           AiRunKind
+  status         AiRunStatus  @default(QUEUED)
+  provider       String?
+  model          String?
+  documentId     String?
+  deviationId    String?
+  requestedById  String
+  inputTokens    Int?
+  outputTokens   Int?
+  errorCode      String?
+  errorMessage   String?
+  output         Json?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  document       Document?    @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  deviation      Deviation?   @relation(fields: [deviationId], references: [id], onDelete: SetNull)
+  haccpControls  HaccpControl[]
+  checklists     ChecklistTemplate[]
+
+  @@index([organizationId, createdAt])
+}
+
+// ───────────────────────────── HACCP ─────────────────────────────
+
+model Product {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  code           String?
+  description    String?
+  shelfLifeDays  Int?
+  halalCertified Boolean      @default(false)
+  bpomNumber     String? // Nomor izin edar (MD/ML) or SPP-IRT
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  haccpControls  HaccpControl[]
+  batches        Batch[]
+
+  @@unique([organizationId, name])
+}
+
+enum HazardType {
+  BIOLOGICAL
+  CHEMICAL
+  PHYSICAL
+  ALLERGEN
+  HALAL
+}
+
+enum ControlStatus {
+  DRAFT
+  APPROVED
+  REJECTED
+  RETIRED
+}
+
+enum ControlSource {
+  AI
+  MANUAL
+}
+
+model HaccpControl {
+  id                     String        @id @default(cuid())
+  organizationId         String
+  productId              String?
+  documentId             String?
+  aiRunId                String?
+  processStep            String
+  hazardType             HazardType
+  hazardDescription      String
+  severity               Int
+  likelihood             Int
+  riskScore              Int
+  isCcp                  Boolean       @default(false)
+  ccpCode                String?
+  justification          String?
+  controlMeasure         String
+  criticalLimitMin       Float?
+  criticalLimitMax       Float?
+  limitUnit              String?
+  criticalLimitText      String?
+  monitoringProcedure    String
+  monitoringFrequency    String
+  correctiveAction       String
+  verificationProcedure  String?
+  records                String?
+  status                 ControlStatus @default(DRAFT)
+  source                 ControlSource @default(MANUAL)
+  createdById            String
+  reviewedById           String?
+  reviewedAt             DateTime?
+  reviewNote             String?
+  version                Int           @default(1)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  organization           Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product                Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  document               Document?     @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  aiRun                  AiRun?        @relation(fields: [aiRunId], references: [id], onDelete: SetNull)
+  checklistItems         ChecklistItem[]
+  ccpRecords             CcpRecord[]
+  deviations             Deviation[]
+
+  @@index([organizationId, status])
+}
+
+// ───────────────────────────── Checklists ─────────────────────────────
+
+enum TemplateStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ChecklistItemType {
+  BOOLEAN
+  NUMBER
+  TEMPERATURE
+  TEXT
+}
+
+model ChecklistTemplate {
+  id             String         @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  category       String         @default("OPERATIONAL")
+  frequency      String         @default("PER_SHIFT")
+  status         TemplateStatus @default(DRAFT)
+  source         ControlSource  @default(MANUAL)
+  aiRunId        String?
+  createdById    String
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  aiRun          AiRun?         @relation(fields: [aiRunId], references: [id], onDelete: SetNull)
+  items          ChecklistItem[]
+  submissions    ChecklistSubmission[]
+
+  @@index([organizationId, status])
+}
+
+model ChecklistItem {
+  id             String            @id @default(cuid())
+  organizationId String
+  templateId     String
+  seq            Int
+  prompt         String
+  guidance       String?
+  type           ChecklistItemType
+  required       Boolean           @default(true)
+  minValue       Float?
+  maxValue       Float?
+  unit           String?
+  expectedBool   Boolean?
+  haccpControlId String?
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  template       ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  haccpControl   HaccpControl?     @relation(fields: [haccpControlId], references: [id], onDelete: SetNull)
+  responses      ChecklistResponse[]
+
+  @@index([templateId])
+}
+
+enum SubmissionStatus {
+  PASSED
+  FAILED
+}
+
+model ChecklistSubmission {
+  id             String            @id @default(cuid())
+  organizationId String
+  templateId     String
+  submittedById  String
+  batchId        String?
+  shift          String?
+  line           String?
+  status         SubmissionStatus
+  failedCount    Int               @default(0)
+  notes          String?
+  submittedAt    DateTime          @default(now())
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  template       ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  batch          Batch?            @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  responses      ChecklistResponse[]
+  deviations     Deviation[]
+
+  @@index([organizationId, submittedAt])
+}
+
+model ChecklistResponse {
+  id             String              @id @default(cuid())
+  organizationId String
+  submissionId   String
+  itemId         String
+  valueBool      Boolean?
+  valueNumber    Float?
+  valueText      String?
+  passed         Boolean
+  note           String?
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  submission     ChecklistSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  item           ChecklistItem       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@index([submissionId])
+}
+
+// ───────────────────────────── CCP monitoring ─────────────────────────────
+
+enum RecordSource {
+  MANUAL
+  CHECKLIST
+  API
+}
+
+model CcpRecord {
+  id             String       @id @default(cuid())
+  organizationId String
+  haccpControlId String
+  value          Float
+  unit           String?
+  withinLimits   Boolean
+  recordedAt     DateTime     @default(now())
+  recordedById   String?
+  source         RecordSource @default(MANUAL)
+  batchId        String?
+  submissionId   String?
+  note           String?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  haccpControl   HaccpControl @relation(fields: [haccpControlId], references: [id], onDelete: Restrict)
+  batch          Batch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  deviations     Deviation[]
+
+  @@index([organizationId, recordedAt])
+  @@index([haccpControlId, recordedAt])
+}
+
+// ───────────────────────────── Deviations & CAPA ─────────────────────────────
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum DeviationSource {
+  CCP
+  CHECKLIST
+  MANUAL
+  SUPPLIER
+  CUSTOMER_COMPLAINT
+  AUDIT
+}
+
+enum DeviationStatus {
+  OPEN
+  INVESTIGATING
+  CAPA_IN_PROGRESS
+  CLOSED
+}
+
+enum Disposition {
+  PENDING
+  HOLD
+  RELEASE
+  REWORK
+  DESTROY
+}
+
+model Deviation {
+  id               String          @id @default(cuid())
+  organizationId   String
+  code             String
+  title            String
+  description      String
+  severity         Severity
+  source           DeviationSource
+  status           DeviationStatus @default(OPEN)
+  disposition      Disposition     @default(PENDING)
+  immediateAction  String?
+  rootCause        String?
+  occurredAt       DateTime        @default(now())
+  reportedById     String?
+  haccpControlId   String?
+  ccpRecordId      String?
+  submissionId     String?
+  batchId          String?
+  supplierId       String?
+  closedById       String?
+  closedAt         DateTime?
+  closureNote      String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  haccpControl     HaccpControl?   @relation(fields: [haccpControlId], references: [id], onDelete: SetNull)
+  ccpRecord        CcpRecord?      @relation(fields: [ccpRecordId], references: [id], onDelete: SetNull)
+  submission       ChecklistSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+  batch            Batch?          @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  supplier         Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  capas            Capa[]
+  aiRuns           AiRun[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status])
+}
+
+enum CapaType {
+  CORRECTIVE
+  PREVENTIVE
+}
+
+enum CapaStatus {
+  OPEN
+  IN_PROGRESS
+  PENDING_VERIFICATION
+  CLOSED
+  REJECTED
+}
+
+model Capa {
+  id               String       @id @default(cuid())
+  organizationId   String
+  deviationId      String
+  code             String
+  type             CapaType
+  title            String
+  rootCause        String?
+  actionPlan       String
+  assigneeId       String
+  dueDate          DateTime
+  status           CapaStatus   @default(OPEN)
+  aiDrafted        Boolean      @default(false)
+  createdById      String
+  completedAt      DateTime?
+  completionNote   String?
+  verifiedById     String?
+  verifiedAt       DateTime?
+  verificationNote String?
+  effective        Boolean?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deviation        Deviation    @relation(fields: [deviationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, code])
+  @@index([organizationId, status, dueDate])
+  @@index([assigneeId])
+}
+
+// ───────────────────────────── Suppliers & traceability ─────────────────────────────
+
+enum SupplierStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+model Supplier {
+  id             String         @id @default(cuid())
+  organizationId String
+  name           String
+  code           String?
+  contactName    String?
+  email          String?
+  phone          String?
+  address        String?
+  status         SupplierStatus @default(PENDING)
+  riskLevel      Severity       @default(MEDIUM)
+  notes          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  certificates   SupplierCertificate[]
+  ingredients    Ingredient[]
+  lots           IngredientLot[]
+  documents      Document[]
+  deviations     Deviation[]
+
+  @@unique([organizationId, name])
+}
+
+enum CertificateType {
+  HALAL
+  BPOM
+  SPP_IRT
+  SNI
+  ISO_22000
+  FSSC_22000
+  HACCP
+  GMP
+  COA
+  NIB
+  OTHER
+}
+
+model SupplierCertificate {
+  id             String          @id @default(cuid())
+  organizationId String
+  supplierId     String
+  type           CertificateType
+  number         String
+  issuer         String?
+  issuedAt       DateTime?
+  expiresAt      DateTime?
+  documentId     String?
+  notes          String?
+  lastAlertAt    DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier       Supplier        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  document       Document?       @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, expiresAt])
+}
+
+model Ingredient {
+  id                  String       @id @default(cuid())
+  organizationId      String
+  name                String
+  code                String?
+  supplierId          String?
+  allergens           String[]
+  halalCritical       Boolean      @default(false)
+  specification       String?
+  unit                String       @default("kg")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier            Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  lots                IngredientLot[]
+
+  @@unique([organizationId, name])
+}
+
+enum LotStatus {
+  QUARANTINE
+  RELEASED
+  REJECTED
+  CONSUMED
+}
+
+model IngredientLot {
+  id             String       @id @default(cuid())
+  organizationId String
+  ingredientId   String
+  supplierId     String?
+  lotNumber      String
+  receivedAt     DateTime
+  quantity       Float
+  unit           String
+  expiryDate     DateTime?
+  status         LotStatus    @default(QUARANTINE)
+  coaDocumentId  String?
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ingredient     Ingredient   @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  batchInputs    BatchInput[]
+
+  @@unique([organizationId, ingredientId, lotNumber])
+}
+
+enum BatchStatus {
+  IN_PRODUCTION
+  ON_HOLD
+  RELEASED
+  REJECTED
+  SHIPPED
+}
+
+model Batch {
+  id             String       @id @default(cuid())
+  organizationId String
+  batchNumber    String
+  productId      String
+  productionDate DateTime
+  expiryDate     DateTime?
+  quantity       Float
+  unit           String
+  line           String?
+  status         BatchStatus  @default(IN_PRODUCTION)
+  notes          String?
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Restrict)
+  inputs         BatchInput[]
+  shipments      Shipment[]
+  ccpRecords     CcpRecord[]
+  submissions    ChecklistSubmission[]
+  deviations     Deviation[]
+
+  @@unique([organizationId, batchNumber])
+}
+
+model BatchInput {
+  id             String        @id @default(cuid())
+  organizationId String
+  batchId        String
+  lotId          String
+  quantity       Float
+  unit           String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  batch          Batch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  lot            IngredientLot @relation(fields: [lotId], references: [id], onDelete: Restrict)
+
+  @@index([lotId])
+  @@index([batchId])
+}
+
+model Shipment {
+  id             String       @id @default(cuid())
+  organizationId String
+  batchId        String
+  customer       String
+  destination    String?
+  quantity       Float
+  unit           String
+  shippedAt      DateTime
+  reference      String?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  batch          Batch        @relation(fields: [batchId], references: [id], onDelete: Restrict)
+
+  @@index([batchId])
+}
+
+// ───────────────────────────── Notifications & evidence ─────────────────────────────
+
+model Notification {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String?
+  type           String
+  title          String
+  body           String?
+  link           String?
+  dedupeKey      String?
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, dedupeKey])
+  @@index([organizationId, userId, readAt])
+}
+
+model EvidenceLink {
+  id             String       @id @default(cuid())
+  organizationId String
+  documentId     String
+  entityType     String
+  entityId       String
+  note           String?
+  createdById    String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  document       Document     @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, entityType, entityId])
+}
