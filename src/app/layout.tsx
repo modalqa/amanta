@@ -18,7 +18,7 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, them
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await pageLocale();
   return (
-    <html lang={locale} className={`${sans.variable} ${mono.variable}`}>
+    <html lang={locale} className={`${sans.variable} ${mono.variable}`} data-scroll-behavior="smooth">
       <body className="min-h-screen antialiased">{children}</body>
     </html>
   );

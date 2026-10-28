@@ -39,7 +39,7 @@ export default async function SupplierPage({ params, searchParams }: { params: P
           })}
         </Table>
         {write && (
-          <form action={addCertificateAction} className="mt-3 grid gap-2 md:grid-cols-4" encType="multipart/form-data">
+          <form action={addCertificateAction} className="mt-3 grid gap-2 md:grid-cols-4">
             <input type="hidden" name="supplierId" value={s.id} />
             <Field label={t("suppliers.certType")}><select name="type" className="input">{CERT_TYPES.map((c) => <option key={c} value={c}>{t(`certType.${c}`)}</option>)}</select></Field>
             <Field label={t("suppliers.certNumber")}><input name="number" required className="input" /></Field>

@@ -25,7 +25,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: SP
       <Flash {...flash(t, sp)} />
       {can(ctx, "documents:write") && (
         <Card title={t("documents.upload")} className="mb-4">
-          <form action={uploadAction} className="grid gap-3 md:grid-cols-4" encType="multipart/form-data">
+          <form action={uploadAction} className="grid gap-3 md:grid-cols-4">
             <Field label={t("documents.file")} hint={t("documents.fileHint", { mb: env().UPLOAD_MAX_MB })}><input type="file" name="file" required accept=".pdf,.docx,.xlsx,.txt,.md,.csv,.png,.jpg,.jpeg" className="input" /></Field>
             <Field label={t("documents.docTitle")}><input name="title" className="input" maxLength={200} placeholder={t("documents.titlePlaceholder")} /></Field>
             <Field label={t("documents.category")}>

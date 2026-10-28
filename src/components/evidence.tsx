@@ -14,7 +14,7 @@ export function EvidenceSection({ t, p, evidence, entityType, entityId, back, ca
         </ul>
       )}
       {canUpload && (
-        <form action={uploadEvidenceAction} className="mt-3 grid gap-2 md:grid-cols-4" encType="multipart/form-data">
+        <form action={uploadEvidenceAction} className="mt-3 grid gap-2 md:grid-cols-4">
           <input type="hidden" name="entityType" value={entityType} /><input type="hidden" name="entityId" value={entityId} /><input type="hidden" name="back" value={back} />
           <Field label={t("documents.file")}><input type="file" name="file" required accept=".pdf,.docx,.xlsx,.txt,.csv,.png,.jpg,.jpeg" className="input" /></Field>
           <Field label={t("documents.docTitle")}><input name="title" className="input" /></Field>
