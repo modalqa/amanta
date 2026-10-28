@@ -24,7 +24,11 @@ const schema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   OPENAI_MODEL: z.string().default("gpt-4.1-mini"),
-  AI_TIMEOUT_MS: z.coerce.number().int().positive().default(90000),
+  // BYOK: organization admins may configure their own provider, model, base URL and key.
+  AI_BYOK_ENABLED: z.enum(["true", "false"]).default("true"),
+  // Allow BYOK base URLs on private/loopback networks and plain HTTP (self-hosted Ollama/vLLM). Keep false on multi-tenant hosting.
+  AI_BYOK_ALLOW_PRIVATE_URLS: z.enum(["true", "false"]).default("false"),
+  AI_TIMEOUT_MS:z.coerce.number().int().positive().default(90000),
   AI_MAX_INPUT_CHARS: z.coerce.number().int().positive().default(60000),
   ALERTS_CRON: z.string().default("0 23 * * *"),
 });

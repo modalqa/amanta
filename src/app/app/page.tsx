@@ -7,7 +7,7 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { flash, prefsOf, type SP } from "../_lib/server";
 import { Flash } from "@/components/ui";
 
-export const metadata = { title: "Dasbor" };
+export const metadata = { title: "Dashboard" };
 
 export default async function Dashboard({ searchParams }: { searchParams: SP }) {
   const ctx = await requireCtx();

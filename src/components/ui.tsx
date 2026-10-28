@@ -31,7 +31,7 @@ const STATUS_TONE: Record<string, keyof typeof TONES> = {
 
 export function Badge({ children, tone, status }: { children: ReactNode; tone?: keyof typeof TONES; status?: string }) {
   const t = tone ?? (status ? STATUS_TONE[status] ?? "gray" : "gray");
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONES[t]}`}>{children}</span>;
+  return <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${TONES[t]}`}>{children}</span>;
 }
 
 export function Card({ title, children, actions, className = "" }: { title?: string; children: ReactNode; actions?: ReactNode; className?: string }) {

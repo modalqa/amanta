@@ -6,7 +6,7 @@ import { flash, type SP } from "../../../_lib/server";
 import { createControlAction } from "../actions";
 import { ControlForm } from "../control-form";
 
-export const metadata = { title: "Kendali baru" };
+export const metadata = { title: "Kontrol baru" };
 
 export default async function NewControlPage({ searchParams }: { searchParams: SP }) {
   const ctx = await requireCtx("haccp:write");

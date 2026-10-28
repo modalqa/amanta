@@ -48,7 +48,7 @@ test.describe.serial("critical journey", () => {
 
     await page.getByRole("button", { name: "Buat draf HACCP + checklist" }).click();
     await expectOk(page, "antrean");
-    const reviewLink = page.getByRole("link", { name: /Tinjau 5 kendali HACCP/ });
+    const reviewLink = page.getByRole("link", { name: /Tinjau 5 kontrol HACCP/ });
     await expect(reviewLink).toBeVisible({ timeout: 45_000 });
     await expect(page.getByText("Selesai").first()).toBeVisible();
 
@@ -173,7 +173,7 @@ test.describe.serial("critical journey", () => {
       expect((await res.body()).toString("utf8").startsWith(magic), kind).toBe(true);
     }
     await page.goto("/app/audit?verify=1");
-    await expect(page.getByText(/Rantai hash utuh/)).toBeVisible();
+    await expect(page.getByText(/Catatan utuh/)).toBeVisible();
     await expect(page.getByText("deviation.closed")).toBeVisible();
     await expect(page.getByText("capa.verified_effective").first()).toBeVisible();
     await page.goto(capaUrl);

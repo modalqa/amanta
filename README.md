@@ -65,7 +65,7 @@ OPENAI_BASE_URL=https://api.openai.com/v1    # e.g. http://localhost:11434/v1 fo
 OPENAI_MODEL=gpt-4.1-mini
 ```
 
-Admins can also store an encrypted key for their own organization under **Pengaturan → AI** (Settings → AI). Model names change over time, so check the provider's current model list. **Document content is sent to the provider you configure.** Check that this fits your data-protection obligations (see [docs/COMPLIANCE.md](docs/COMPLIANCE.md)).
+**Bring your own key (BYOK).** An organization's Owner or Admin can choose their own provider, model, base URL and API key under **Pengaturan → AI** (Settings → AI). This works even when the server has `AI_PROVIDER=none`, and it applies to that organization only. The key and settings are stored encrypted (AES-256-GCM). A stored key is never reused for a different provider or URL. Base URLs must be HTTPS and resolve to public addresses, and the check runs again before every request. Self-hosted single-company servers that use a private Ollama/vLLM can set `AI_BYOK_ALLOW_PRIVATE_URLS=true`. `AI_BYOK_ENABLED=false` turns BYOK off. The remaining risk is DNS rebinding between the check and the connection: redirects are refused, but the connection is not pinned to the checked IP. Model names change over time, so check the provider's current model list. **Document content is sent to the provider you configure.** Check that this fits your data-protection obligations (see [docs/COMPLIANCE.md](docs/COMPLIANCE.md)).
 
 ## Docker (full stack)
 

@@ -37,7 +37,7 @@ test("tenant isolation through the UI: another tenant cannot open foreign record
 test("auditor is read-only (no write controls rendered, server rejects actions)", async ({ page }) => {
   await login(page, "auditor@contoh-pangan.test");
   await page.goto("/app/haccp");
-  await expect(page.getByRole("link", { name: "Kendali baru" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Kontrol baru" })).toHaveCount(0);
   await page.goto("/app/haccp/new");
   await expect(page).toHaveURL(/error=forbidden/);
   await expect(page.locator("[role=alert]:not(#__next-route-announcer__)")).toContainText("tidak memiliki izin");

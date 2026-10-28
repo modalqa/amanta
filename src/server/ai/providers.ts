@@ -7,7 +7,7 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body), signal: ctrl.signal });
+    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body), signal: ctrl.signal, redirect: "error" });
     const text = await res.text();
     if (!res.ok) {
       // Never echo request headers (API keys); include a short slice of the provider error only.

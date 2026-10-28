@@ -58,8 +58,8 @@ async function haccpPlan(ctx: Ctx, pdf?: PdfReport) {
   const p = prefs(ctx);
   const t = getT(ctx.org.locale);
   const controls = await ctx.db.haccpControl.findMany({ where: { status: "APPROVED" }, include: { product: { select: { name: true } } }, orderBy: [{ isCcp: "desc" }, { ccpCode: "asc" }, { processStep: "asc" }] });
-  const r = pdf ?? new PdfReport(`Rencana HACCP – ${ctx.org.name}`, `Dicetak ${formatDateTime(new Date(), p)} oleh ${ctx.userName}. Hanya kendali berstatus APPROVED.`, { landscape: true });
-  r.heading("Analisis bahaya & kendali (disetujui)");
+  const r = pdf ?? new PdfReport(`Rencana HACCP – ${ctx.org.name}`, `Dicetak ${formatDateTime(new Date(), p)} oleh ${ctx.userName}. Hanya kontrol yang sudah disetujui.`, { landscape: true });
+  r.heading("Analisis bahaya & kontrol (disetujui)");
   r.table([
     { header: "Kode", width: 45, get: (c: (typeof controls)[number]) => c.ccpCode ?? (c.isCcp ? "CCP" : "PRP/OPRP") },
     { header: "Produk / Tahap", width: 95, get: (c) => `${c.product?.name ? c.product.name + " – " : ""}${c.processStep}` },
@@ -149,7 +149,7 @@ export async function generateReport(ctx: Ctx, kind: ReportKind, format: ReportF
       if (!b) throw new AppError("NOT_FOUND", "batch_not_found");
       const r = new PdfReport(`Laporan Ketertelusuran Batch ${b.batchNumber}`, `${ctx.org.name} – dicetak ${formatDateTime(new Date(), p)}`);
       r.keyValues([["Produk", b.product.name], ["Tanggal produksi", formatDate(b.productionDate, p)], ["Kedaluwarsa", formatDate(b.expiryDate, p)], ["Jumlah", `${b.quantity} ${b.unit}`], ["Lini", b.line ?? "–"], ["Status", t(`batchStatus.${b.status}`)], ["No. izin edar", b.product.bpomNumber ?? "–"]]);
-      r.heading("Telusur balik: bahan baku");
+      r.heading("Telusur mundur: bahan baku");
       r.table([
         { header: "Bahan", width: 110, get: (i: (typeof b.inputs)[number]) => i.lot.ingredient.name },
         { header: "Lot", width: 80, get: (i) => i.lot.lotNumber },

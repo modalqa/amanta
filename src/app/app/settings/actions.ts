@@ -1,6 +1,6 @@
 "use server";
 import { requireCtx } from "@/server/auth/session";
-import { createApiKey, revokeApiKey, setAiKey, updateOrgSettings } from "@/server/services/settings";
+import { createApiKey, removeAiConfig, revokeApiKey, setAiConfig, testAiConnection, updateOrgSettings } from "@/server/services/settings";
 import { inviteMember, updateMember } from "@/server/services/accounts";
 import { env } from "@/server/env";
 import { fd, runAction } from "../../_lib/server";
@@ -44,9 +44,17 @@ export async function revokeApiKeyAction(form: FormData) {
   await runAction("/app/settings/api-keys", async () => { await revokeApiKey(await requireCtx("apikeys:manage"), fd(form, "id")); });
 }
 
-export async function aiKeyAction(form: FormData) {
+export async function aiConfigAction(form: FormData) {
   await runAction("/app/settings/ai", async () => {
     const ctx = await requireCtx("ai:configure");
-    await setAiKey(ctx, fd(form, "op") === "remove" ? null : fd(form, "apiKey"));
+    await setAiConfig(ctx, { provider: fd(form, "provider") as never, model: fd(form, "model"), baseUrl: fd(form, "baseUrl"), apiKey: fd(form, "apiKey") });
   });
+}
+
+export async function aiRemoveConfigAction() {
+  await runAction("/app/settings/ai", async () => { await removeAiConfig(await requireCtx("ai:configure")); }, "ai_removed");
+}
+
+export async function aiTestAction() {
+  await runAction("/app/settings/ai", async () => { await testAiConnection(await requireCtx("ai:configure")); }, "ai_test_ok");
 }

@@ -1,6 +1,7 @@
 /**
- * Demo seed for local development and E2E tests. Creates two organizations so tenant
- * isolation can be explored. NEVER run against production (guarded below).
+ * Demo seed for local development and E2E tests. Creates the same demo dataset for each
+ * organization in DEMO_ORGS, plus a small second tenant so tenant isolation can be explored.
+ * Each organization is skipped if its slug already exists, so new demo orgs can be added to a seeded DB. NEVER run against production (guarded below).
  * Run: npm run db:seed   (password from SEED_PASSWORD, default shown in README)
  */
 import "dotenv/config";
@@ -35,21 +36,51 @@ async function user(email: string, name: string, hash: string) {
   return prisma.user.upsert({ where: { email }, update: {}, create: { email, name, passwordHash: hash } });
 }
 
-async function main() {
-  if (await prisma.organization.findUnique({ where: { slug: "contoh-pangan" } })) {
-    console.log("Seed already applied (organization 'contoh-pangan' exists). Skipping.");
-    return;
+type DemoOrg = {
+  name: string;
+  slug: string;
+  legalName: string | null;
+  province: string | null;
+  address: string | null;
+  /** Fictional people; emails use the reserved .test TLD so they can never reach a real inbox. */
+  people: Array<[string, string, Role]>;
+};
+
+// The first entry is what the E2E suite logs in with; keep it unchanged.
+const DEMO_ORGS: DemoOrg[] = [
+  {
+    name: "PT Contoh Pangan Nusantara", slug: "contoh-pangan", legalName: "PT Contoh Pangan Nusantara", province: "Jawa Barat", address: "Kawasan Industri Contoh Blok A-1, Bekasi",
+    people: [
+      ["owner@contoh-pangan.test", "Rina Owner", "OWNER"],
+      ["qa@contoh-pangan.test", "Dewi Kurniawati (QA)", "QA_MANAGER"],
+      ["qa2@contoh-pangan.test", "Budi Santoso (QA)", "QA_MANAGER"],
+      ["supervisor@contoh-pangan.test", "Agus Supervisor", "SUPERVISOR"],
+      ["operator@contoh-pangan.test", "Siti Operator", "OPERATOR"],
+      ["auditor@contoh-pangan.test", "Auditor Eksternal", "AUDITOR"],
+    ],
+  },
+  {
+    // Address and legal details are not known; left empty rather than invented.
+    name: "PT RAI", slug: "pt-rai", legalName: "PT RAI", province: null, address: null,
+    people: [
+      ["owner@rai.test", "Owner PT RAI", "OWNER"],
+      ["qa@rai.test", "QA Manager PT RAI", "QA_MANAGER"],
+      ["qa2@rai.test", "QA Manager 2 PT RAI", "QA_MANAGER"],
+      ["supervisor@rai.test", "Supervisor PT RAI", "SUPERVISOR"],
+      ["operator@rai.test", "Operator PT RAI", "OPERATOR"],
+      ["auditor@rai.test", "Auditor PT RAI", "AUDITOR"],
+    ],
+  },
+];
+
+/** Creates one organization with the full demo dataset. Returns false if it already exists. */
+async function seedDemoOrg(spec: DemoOrg, hash: string): Promise<boolean> {
+  if (await prisma.organization.findUnique({ where: { slug: spec.slug } })) {
+    console.log(`Skipping ${spec.name}: organization '${spec.slug}' already exists.`);
+    return false;
   }
-  const hash = await hashPassword(PASSWORD);
-  const org = await prisma.organization.create({ data: { name: "PT Contoh Pangan Nusantara", slug: "contoh-pangan", legalName: "PT Contoh Pangan Nusantara", province: "Jawa Barat", address: "Kawasan Industri Contoh Blok A-1, Bekasi" } });
-  const people: Array<[string, string, Role]> = [
-    ["owner@contoh-pangan.test", "Rina Owner", "OWNER"],
-    ["qa@contoh-pangan.test", "Dewi Kurniawati (QA)", "QA_MANAGER"],
-    ["qa2@contoh-pangan.test", "Budi Santoso (QA)", "QA_MANAGER"],
-    ["supervisor@contoh-pangan.test", "Agus Supervisor", "SUPERVISOR"],
-    ["operator@contoh-pangan.test", "Siti Operator", "OPERATOR"],
-    ["auditor@contoh-pangan.test", "Auditor Eksternal", "AUDITOR"],
-  ];
+  const org = await prisma.organization.create({ data: { name: spec.name, slug: spec.slug, legalName: spec.legalName, province: spec.province, address: spec.address } });
+  const people = spec.people;
   const ids: Record<string, string> = {};
   for (const [email, name, role] of people) {
     const u = await user(email, name, hash);
@@ -107,17 +138,31 @@ async function main() {
   }
   const t = await getTemplate(op, gmp.id);
   await submitChecklist(op, { templateId: gmp.id, shift: "Pagi", responses: t.items.map((it) => ({ itemId: it.id, valueBool: it.type === "BOOLEAN" ? true : null, valueNumber: it.type === "TEMPERATURE" ? 3.2 : it.type === "NUMBER" ? 150 : null, valueText: it.type === "TEXT" ? "Area bersih" : null })) });
+  return true;
+}
 
-  // Second tenant (to demonstrate isolation).
+async function main() {
+  const hash = await hashPassword(PASSWORD);
+  const created = [];
+  for (const spec of DEMO_ORGS) if (await seedDemoOrg(spec, hash)) created.push(spec);
+
+  // Small second tenant (to demonstrate isolation).
+  if (await prisma.organization.findUnique({ where: { slug: "sambal-lain" } })) {
+    console.log("Skipping UD Sambal Lain: already exists.");
+  } else {
   const other = await prisma.organization.create({ data: { name: "UD Sambal Lain", slug: "sambal-lain" } });
   const otherOwner = await user("owner@sambal-lain.test", "Pemilik Sambal", hash);
   await prisma.membership.create({ data: { organizationId: other.id, userId: otherOwner.id, role: "OWNER" } });
   const oc = await ctxFor(other.id, otherOwner.id, "OWNER");
   await createSupplier(oc, { name: "Petani Cabai Garut", code: null, contactName: null, email: null, phone: null, address: "Garut", status: "PENDING", riskLevel: "MEDIUM", notes: null });
+  }
 
   console.log("Seed complete.");
   console.log(`Demo users (password from SEED_PASSWORD, default "${process.env.SEED_PASSWORD ? "<from env>" : PASSWORD}"):`);
-  for (const [email, , role] of people) console.log(`  ${role.padEnd(11)} ${email}`);
+  for (const spec of created) {
+    console.log(`  ${spec.name}`);
+    for (const [email, , role] of spec.people) console.log(`    ${role.padEnd(11)} ${email}`);
+  }
   console.log("  OWNER (2nd tenant) owner@sambal-lain.test");
 }
 
